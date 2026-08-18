@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from ..auth import get_current_user
 from ..config import settings
 from ..database import get_db
-from ..models import Appointment, BillingWebhookEvent, CalendarConnection, Conversation, Flow, Lead, LeadNote, Message, PendingBillingAccount, ROISettings, Subscription, User
+from ..models import Appointment, BillingWebhookEvent, CalendarConnection, Conversation, CrmPipeline, CrmPipelineStage, CrmTag, CrmTask, CustomField, CustomFieldValue, Flow, Lead, LeadNote, Message, PendingBillingAccount, QuickReply, ROISettings, Subscription, User
 from ..models_rag import AISettings, KnowledgeBase, KnowledgeChunk
 from ..models_whatsapp import WhatsAppConnection, WhatsAppInboundEvent, WhatsAppOutboundMessage, WhatsAppContactState
 from ..services import plan_limits, billing_service
@@ -624,9 +624,11 @@ def admin_delete_user(
             db.query(Message).filter(Message.conversation_id.in_(conv_ids)).delete(synchronize_session=False)
             db.query(Conversation).filter(Conversation.id.in_(conv_ids)).delete(synchronize_session=False)
 
-    # Leads e notas
+    # Leads, notas, tarefas e campos personalizados vinculados
     if lead_ids:
         db.query(LeadNote).filter(LeadNote.lead_id.in_(lead_ids)).delete(synchronize_session=False)
+        db.query(CrmTask).filter(CrmTask.lead_id.in_(lead_ids)).delete(synchronize_session=False)
+        db.query(CustomFieldValue).filter(CustomFieldValue.lead_id.in_(lead_ids)).delete(synchronize_session=False)
         db.query(Appointment).filter(Appointment.lead_id.in_(lead_ids)).update({Appointment.lead_id: None}, synchronize_session=False)
         db.query(Lead).filter(Lead.id.in_(lead_ids)).delete(synchronize_session=False)
 
@@ -645,6 +647,13 @@ def admin_delete_user(
         db.query(KnowledgeBase).filter(KnowledgeBase.id.in_(kb_ids)).delete(synchronize_session=False)
 
     db.query(CalendarConnection).filter(CalendarConnection.owner_id == user.id).delete(synchronize_session=False)
+    db.query(CustomFieldValue).filter(CustomFieldValue.owner_id == user.id).delete(synchronize_session=False)
+    db.query(CustomField).filter(CustomField.owner_id == user.id).delete(synchronize_session=False)
+    db.query(CrmPipelineStage).filter(CrmPipelineStage.owner_id == user.id).delete(synchronize_session=False)
+    db.query(CrmPipeline).filter(CrmPipeline.owner_id == user.id).delete(synchronize_session=False)
+    db.query(CrmTag).filter(CrmTag.owner_id == user.id).delete(synchronize_session=False)
+    db.query(CrmTask).filter(CrmTask.owner_id == user.id).delete(synchronize_session=False)
+    db.query(QuickReply).filter(QuickReply.owner_id == user.id).delete(synchronize_session=False)
     db.query(ROISettings).filter(ROISettings.owner_id == user.id).delete(synchronize_session=False)
     db.query(Subscription).filter(Subscription.owner_id == user.id).delete(synchronize_session=False)
     db.query(PendingBillingAccount).filter(

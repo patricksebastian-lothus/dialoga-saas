@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from .config import settings
 from .database import init_db, SessionLocal
 from .services.template_loader import seed_templates
-from .routers import auth, templates, flows, leads, whatsapp, dashboard, inbox, appointments, calendar, setup, admin, billing, plans
+from .routers import auth, templates, flows, leads, whatsapp, dashboard, inbox, appointments, calendar, setup, admin, billing, plans, crm
 from .routers.whatsapp_meta import meta_webhook_router  # NOVO: webhook Meta (modo shadow)
 from .routers.whatsapp_connections import router as whatsapp_connections_router  # NOVO: Fase 3
 from .routers.ai import router as ai_router  # NOVO: Fase A (IA + RAG)
@@ -90,6 +90,7 @@ app.include_router(setup.router, prefix="/api/setup", tags=["Setup"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 app.include_router(billing.router, prefix="/api/billing", tags=["Billing"])
 app.include_router(plans.router, prefix="/api/plans", tags=["Planos"])
+app.include_router(crm.router, prefix="/api/crm", tags=["CRM vertical"])
 app.include_router(whatsapp.router, prefix="/api/whatsapp", tags=["WhatsApp"])
 app.include_router(whatsapp_connections_router, prefix="/api/whatsapp/connections", tags=["WhatsApp Conexões"])  # NOVO: Fase 3
 app.include_router(ai_router, prefix="/api/ai", tags=["IA"])  # NOVO: Fase A (IA + RAG)

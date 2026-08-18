@@ -311,3 +311,136 @@ from .models_rag import (  # noqa: E402,F401
     KnowledgeChunk,
     AISettings,
 )
+
+
+# --------------------------------------------------------------------------- #
+# EMG-1A — CRM operacional vertical (Emagrecentro / clínicas)
+# Tabelas novas e aditivas: create_all cria automaticamente sem migration manual.
+# --------------------------------------------------------------------------- #
+class CrmTag(Base):
+    """Etiqueta gerenciável do CRM por tenant."""
+    __tablename__ = "crm_tags"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String(100), nullable=False, index=True)
+    color = Column(String(20), default="#3b82f6")
+    description = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=utcnow, index=True)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    owner = relationship("User")
+
+
+class CustomField(Base):
+    """Campo personalizado que aparece na ficha do contato/lead."""
+    __tablename__ = "custom_fields"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    key = Column(String(120), nullable=False, index=True)
+    field_type = Column(String(30), default="text", nullable=False)  # text|number|date|select|boolean|textarea
+    options = Column(MutableList.as_mutable(JSON), nullable=True, default=list)
+    required = Column(Boolean, default=False, nullable=False)
+    show_in_table = Column(Boolean, default=False, nullable=False)
+    sort_order = Column(Integer, default=0, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=utcnow, index=True)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    owner = relationship("User")
+
+
+class CustomFieldValue(Base):
+    """Valor de um campo personalizado para um lead/contato."""
+    __tablename__ = "custom_field_values"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    lead_id = Column(Integer, ForeignKey("leads.id"), nullable=False, index=True)
+    field_id = Column(Integer, ForeignKey("custom_fields.id"), nullable=False, index=True)
+    value = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow, index=True)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    owner = relationship("User")
+    lead = relationship("Lead")
+    field = relationship("CustomField")
+
+
+class CrmPipeline(Base):
+    """Funil comercial/operacional por tenant."""
+    __tablename__ = "crm_pipelines"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    description = Column(Text, nullable=True)
+    is_default = Column(Boolean, default=False, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=utcnow, index=True)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    owner = relationship("User")
+    stages = relationship("CrmPipelineStage", back_populates="pipeline", cascade="all, delete-orphan")
+
+
+class CrmPipelineStage(Base):
+    """Etapa de um funil do CRM."""
+    __tablename__ = "crm_pipeline_stages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    pipeline_id = Column(Integer, ForeignKey("crm_pipelines.id"), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    slug = Column(String(120), nullable=False, index=True)
+    color = Column(String(20), default="#3b82f6")
+    sort_order = Column(Integer, default=0, nullable=False)
+    probability = Column(Integer, default=0, nullable=False)
+    is_won = Column(Boolean, default=False, nullable=False)
+    is_lost = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=utcnow, index=True)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    owner = relationship("User")
+    pipeline = relationship("CrmPipeline", back_populates="stages")
+
+
+class CrmTask(Base):
+    """Tarefa operacional ligada ou não a um lead."""
+    __tablename__ = "crm_tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    lead_id = Column(Integer, ForeignKey("leads.id"), nullable=True, index=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    status = Column(String(50), default="pendente", index=True)  # sem_status|pendente|em_andamento|aguardando_resposta|concluida
+    task_type = Column(String(50), default="follow_up", index=True)
+    due_at = Column(DateTime, nullable=True, index=True)
+    assigned_to = Column(String(255), nullable=True)
+    priority = Column(String(20), default="normal", index=True)  # baixa|normal|alta|urgente
+    created_at = Column(DateTime, default=utcnow, index=True)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    owner = relationship("User")
+    lead = relationship("Lead")
+
+
+class QuickReply(Base):
+    """Resposta rápida para atendimento humano/Inbox."""
+    __tablename__ = "quick_replies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    title = Column(String(120), nullable=False)
+    content = Column(Text, nullable=False)
+    category = Column(String(80), nullable=True, index=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=utcnow, index=True)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    owner = relationship("User")
