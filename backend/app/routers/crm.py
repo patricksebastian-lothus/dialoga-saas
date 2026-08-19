@@ -385,6 +385,34 @@ def delete_custom_field(field_id: int, db: Session = Depends(get_db), current_us
     db.delete(field); db.commit(); return
 
 
+@router.get("/contact-field-values")
+def contact_field_values(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Valores de campos marcados para aparecer na tabela de contatos."""
+    fields = db.query(CustomField).filter(
+        CustomField.owner_id == current_user.id,
+        CustomField.is_active == True,  # noqa: E712
+        CustomField.show_in_table == True,  # noqa: E712
+    ).all()
+    field_ids = [f.id for f in fields]
+    field_by_id = {f.id: f for f in fields}
+    result: dict[str, dict[str, str]] = {}
+    if not field_ids:
+        return result
+    values = db.query(CustomFieldValue).filter(
+        CustomFieldValue.owner_id == current_user.id,
+        CustomFieldValue.field_id.in_(field_ids),
+    ).all()
+    for v in values:
+        f = field_by_id.get(v.field_id)
+        if not f:
+            continue
+        result.setdefault(str(v.lead_id), {})[f.key] = v.value
+    return result
+
+
 @router.get("/leads/{lead_id}/custom-values")
 def get_lead_custom_values(lead_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     _lead_or_404(db, current_user, lead_id)

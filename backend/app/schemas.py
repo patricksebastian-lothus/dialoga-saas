@@ -163,8 +163,23 @@ class LeadOut(BaseModel):
         from_attributes = True
 
 
+class LeadCreate(BaseModel):
+    name: Optional[str] = Field(None, max_length=255)
+    phone: Optional[str] = Field(None, max_length=50)
+    email: Optional[str] = Field(None, max_length=255)
+    status: Optional[str] = "novo"
+    stage: Optional[str] = None
+    tags: Optional[List[str]] = None
+    source: Optional[str] = "manual"
+    pipeline_type: Optional[str] = "generic"
+    pipeline_stage: Optional[str] = "novo"
+    context: Optional[Dict[str, Any]] = None
+
+
 class LeadUpdate(BaseModel):
     name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
     status: Optional[str] = None
     stage: Optional[str] = None
     tags: Optional[List[str]] = None

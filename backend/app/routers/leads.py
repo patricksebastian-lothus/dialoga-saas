@@ -18,8 +18,8 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import get_db
-from ..models import Conversation, Flow, Lead, LeadNote, User
-from ..schemas import LeadOut, LeadUpdate, LeadNoteCreate, LeadNoteOut
+from ..models import Conversation, CustomFieldValue, Flow, Lead, LeadNote, User
+from ..schemas import LeadCreate, LeadOut, LeadUpdate, LeadNoteCreate, LeadNoteOut
 
 
 router = APIRouter()
@@ -72,6 +72,48 @@ def list_leads(
     return [LeadOut.model_validate(l) for l in leads]
 
 
+def _normalize_tags(values: Optional[list[str]]) -> list[str]:
+    seen = set()
+    tags = []
+    for t in values or []:
+        tag = str(t or "").strip()
+        key = tag.lower()
+        if tag and key not in seen:
+            seen.add(key)
+            tags.append(tag)
+    return tags
+
+
+@router.post("", response_model=LeadOut, status_code=201)
+def create_lead(
+    payload: LeadCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Cria contato/lead manualmente no CRM."""
+    if not (payload.name or payload.phone or payload.email):
+        raise HTTPException(400, "Informe pelo menos nome, telefone ou email.")
+    lead = Lead(
+        owner_id=current_user.id,
+        flow_id=None,
+        name=(payload.name or "").strip() or None,
+        phone=(payload.phone or "").strip() or None,
+        email=(payload.email or "").strip() or None,
+        status=payload.status or "novo",
+        stage=payload.stage,
+        source=payload.source or "manual",
+        tags=_normalize_tags(payload.tags),
+        pipeline_type=payload.pipeline_type or "generic",
+        pipeline_stage=payload.pipeline_stage or "novo",
+        context=payload.context or {},
+        last_interaction_at=datetime.now(timezone.utc),
+    )
+    db.add(lead)
+    db.commit()
+    db.refresh(lead)
+    return LeadOut.model_validate(lead)
+
+
 @router.put("/{lead_id}", response_model=LeadOut)
 def update_lead(
     lead_id: int,
@@ -86,6 +128,10 @@ def update_lead(
 
     if payload.name is not None:
         lead.name = payload.name
+    if payload.phone is not None:
+        lead.phone = payload.phone
+    if payload.email is not None:
+        lead.email = payload.email
     if payload.status is not None:
         lead.status = payload.status
         if payload.status == "convertido" and not getattr(lead, "converted_at", None):
@@ -103,16 +149,7 @@ def update_lead(
     if payload.stage is not None:
         lead.stage = payload.stage
     if payload.tags is not None:
-        # Normaliza tags: remove vazias, espaços e duplicadas preservando ordem.
-        seen = set()
-        tags = []
-        for t in payload.tags:
-            tag = str(t or "").strip()
-            key = tag.lower()
-            if tag and key not in seen:
-                seen.add(key)
-                tags.append(tag)
-        lead.tags = tags
+        lead.tags = _normalize_tags(payload.tags)
     if hasattr(lead, "updated_at"):
         lead.updated_at = datetime.now(timezone.utc)
 
@@ -200,6 +237,10 @@ def delete_lead(
     db.query(LeadNote).filter(
         LeadNote.lead_id == lead.id,
         LeadNote.owner_id == current_user.id,
+    ).delete(synchronize_session=False)
+    db.query(CustomFieldValue).filter(
+        CustomFieldValue.lead_id == lead.id,
+        CustomFieldValue.owner_id == current_user.id,
     ).delete(synchronize_session=False)
 
     db.delete(lead)
