@@ -105,6 +105,8 @@
     crmCreateCustomField: function (b) { return request("/api/crm/custom-fields", { method: "POST", body: b }); },
     crmUpdateCustomField: function (id, b) { return request("/api/crm/custom-fields/" + id, { method: "PUT", body: b }); },
     crmDeleteCustomField: function (id) { return request("/api/crm/custom-fields/" + id, { method: "DELETE" }); },
+    crmLeadCustomValues: function (leadId) { return request("/api/crm/leads/" + leadId + "/custom-values"); },
+    crmSetLeadCustomValues: function (leadId, values) { return request("/api/crm/leads/" + leadId + "/custom-values", { method: "PUT", body: { values: values || {} } }); },
     crmPipelines: function () { return request("/api/crm/pipelines"); },
     crmCreatePipeline: function (b) { return request("/api/crm/pipelines", { method: "POST", body: b }); },
     crmUpdatePipeline: function (id, b) { return request("/api/crm/pipelines/" + id, { method: "PUT", body: b }); },
