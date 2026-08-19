@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import User, Flow
-from ..models_whatsapp import WhatsAppConnection
+from ..models_whatsapp import WhatsAppConnection, WhatsAppInboundEvent, WhatsAppOutboundMessage, WhatsAppContactState
 from ..schemas_whatsapp import (
     WhatsAppConnectionCreate, WhatsAppConnectionOut, WhatsAppSendTestRequest,
     WhatsAppAutomationPauseUpdate,
@@ -141,24 +141,36 @@ def create_connection(
     return WhatsAppConnectionOut.model_validate(conn)
 
 
+def _purge_connection(db: Session, conn: WhatsAppConnection) -> None:
+    """Apaga filhos com FK e a conexao. Nao chama Evolution (evita timeout/404)."""
+    cid = conn.id
+    db.query(WhatsAppContactState).filter(WhatsAppContactState.connection_id == cid).delete(synchronize_session=False)
+    db.query(WhatsAppOutboundMessage).filter(WhatsAppOutboundMessage.connection_id == cid).delete(synchronize_session=False)
+    db.query(WhatsAppInboundEvent).filter(WhatsAppInboundEvent.connection_id == cid).delete(synchronize_session=False)
+    db.delete(conn)
+    db.commit()
+
+
 @router.delete("/{conn_id}")
 def delete_connection(
     conn_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Remove uma conexao do usuario. Evolution e best-effort (nao bloqueia)."""
-    from ..services import evolution_service as evo_svc
-
     conn = _get_owned_connection(db, conn_id, current_user)
-    instance_name = conn.evolution_instance_name if conn.provider == "evolution" else None
-    db.delete(conn)
-    db.commit()
-    if instance_name:
-        try:
-            evo_svc.delete_instance(instance_name)
-        except Exception as exc:
-            logger.warning("Falha ao limpar instancia Evolution %s: %s", instance_name, exc)
+    _purge_connection(db, conn)
+    return {"ok": True}
+
+
+@router.post("/{conn_id}/remove")
+def remove_connection(
+    conn_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Alias POST: alguns proxies/browsers quebram DELETE e o fetch vira 'nao conectou'."""
+    conn = _get_owned_connection(db, conn_id, current_user)
+    _purge_connection(db, conn)
     return {"ok": True}
 
 

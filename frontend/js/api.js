@@ -144,7 +144,7 @@
     // ---- WhatsApp Conexões (Fase 3) ----
     listConnections: function () { return request("/api/whatsapp/connections"); },
     createConnection: function (b) { return request("/api/whatsapp/connections", { method: "POST", body: b }); },
-    deleteConnection: function (id) { return request("/api/whatsapp/connections/" + id, { method: "DELETE" }); },
+    deleteConnection: function (id) { return request("/api/whatsapp/connections/" + id + "/remove", { method: "POST", body: {} }); },
     setConnectionAutomationPaused: function (id, paused) { return request("/api/whatsapp/connections/" + id + "/automation-paused", { method: "POST", body: { paused: !!paused } }); },
     sendTestMessage: function (id, b) { return request("/api/whatsapp/connections/" + id + "/send-test", { method: "POST", body: b }); },
     // Evolution / QR Code (Fase 5)
