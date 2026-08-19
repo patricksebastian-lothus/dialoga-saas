@@ -141,17 +141,25 @@ def create_connection(
     return WhatsAppConnectionOut.model_validate(conn)
 
 
-@router.delete("/{conn_id}", status_code=204)
+@router.delete("/{conn_id}")
 def delete_connection(
     conn_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Remove uma conexao do usuario."""
+    """Remove uma conexao do usuario. Evolution e best-effort (nao bloqueia)."""
+    from ..services import evolution_service as evo_svc
+
     conn = _get_owned_connection(db, conn_id, current_user)
+    instance_name = conn.evolution_instance_name if conn.provider == "evolution" else None
     db.delete(conn)
     db.commit()
-    return
+    if instance_name:
+        try:
+            evo_svc.delete_instance(instance_name)
+        except Exception as exc:
+            logger.warning("Falha ao limpar instancia Evolution %s: %s", instance_name, exc)
+    return {"ok": True}
 
 
 @router.post("/{conn_id}/automation-paused", response_model=WhatsAppConnectionOut)
@@ -185,7 +193,14 @@ def send_test(
     Atualiza last_error/status conforme o resultado (ex.: token invalido -> status=error).
     """
     conn = _get_owned_connection(db, conn_id, current_user)
-    result = send_text_via_connection(conn, payload.to, payload.text)
+    from ..services import evolution_service as evo_svc
+
+    if conn.provider == "evolution":
+        if not conn.evolution_instance_name:
+            raise HTTPException(400, "Conexao Evolution sem instancia.")
+        result = evo_svc.send_text(conn.evolution_instance_name, payload.to, payload.text)
+    else:
+        result = send_text_via_connection(conn, payload.to, payload.text)
 
     if result.get("ok"):
         if conn.status != "connected":
@@ -194,8 +209,13 @@ def send_test(
         db.commit()
         return {"ok": True, "provider_message_id": result.get("provider_message_id")}
 
-    # falha: registra motivo amigavel
     msg = result.get("hint") or result.get("error") or "Falha desconhecida."
+    if "Application not found" in str(msg) or "HTTP 404" in str(msg):
+        conn.status = "error"
+        msg = (
+            "Instancia nao encontrada na Evolution (Application not found). "
+            "Apague esta conexao e crie outra pelo QR Code."
+        )
     if result.get("error_code") == 190:
         conn.status = "error"
     conn.last_error = msg
