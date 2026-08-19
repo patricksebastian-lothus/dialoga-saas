@@ -14,7 +14,8 @@
 
   async function request(path, opts) {
     opts = opts || {};
-    const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+    const headers = Object.assign({}, opts.headers || {});
+    if (opts.body) headers["Content-Type"] = headers["Content-Type"] || "application/json";
     const t = getToken();
     if (t) headers["Authorization"] = "Bearer " + t;
     const url = path.startsWith("http") ? path : API_BASE + path;
@@ -26,12 +27,14 @@
         body: opts.body ? JSON.stringify(opts.body) : undefined,
       });
     } catch (e) {
-      throw new Error("Nao foi possivel conectar ao backend (" + API_BASE + "). Verifique se esta rodando.");
+      throw new Error("Nao foi possivel conectar ao backend (" + API_BASE + "). Abra " + API_BASE + "/health e tente de novo (o Render pode estar acordando).");
     }
+    if (res.status === 204) return { ok: true };
     let data = null;
     try { data = await res.json(); } catch (e) {}
     if (!res.ok) {
-      throw new Error((data && (data.detail || data.message)) || ("Erro HTTP " + res.status));
+      const detail = data && (data.detail || data.message);
+      throw new Error((typeof detail === "string" ? detail : null) || ("Erro HTTP " + res.status));
     }
     return data;
   }

@@ -135,8 +135,7 @@ def delete_instance(instance_name: str) -> Dict[str, Any]:
     if not _configured():
         return {"ok": False, "error": "Evolution nao configurada."}
     try:
-        with httpx.Client(timeout=20.0) as client:
-            # logout (desconecta o numero) e depois delete
+        with httpx.Client(timeout=8.0) as client:
             client.delete(f"{_base_url()}/instance/logout/{instance_name}", headers=_headers())
             r = client.delete(f"{_base_url()}/instance/delete/{instance_name}", headers=_headers())
     except Exception as exc:
