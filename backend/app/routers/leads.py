@@ -146,6 +146,25 @@ def update_lead(
         lead.pipeline_type = payload.pipeline_type or "generic"
     if payload.pipeline_stage is not None:
         lead.pipeline_stage = payload.pipeline_stage or "novo"
+        lead.stage = lead.pipeline_stage
+        # EMG-1B: etapa ganha/perdida do funil reflete no status operacional
+        from ..models import CrmPipeline, CrmPipelineStage
+        st = (
+            db.query(CrmPipelineStage)
+            .join(CrmPipeline, CrmPipeline.id == CrmPipelineStage.pipeline_id)
+            .filter(
+                CrmPipelineStage.owner_id == current_user.id,
+                CrmPipeline.name == lead.pipeline_type,
+                CrmPipelineStage.slug == lead.pipeline_stage,
+            )
+            .first()
+        )
+        if st and st.is_won and payload.status is None:
+            lead.status = "convertido"
+            if not getattr(lead, "converted_at", None):
+                lead.converted_at = datetime.now(timezone.utc)
+        elif st and st.is_lost and payload.status is None:
+            lead.status = "perdido"
     if payload.stage is not None:
         lead.stage = payload.stage
     if payload.tags is not None:

@@ -120,6 +120,7 @@
     crmUpdateStage: function (id, b) { return request("/api/crm/pipeline-stages/" + id, { method: "PUT", body: b }); },
     crmDeleteStage: function (id) { return request("/api/crm/pipeline-stages/" + id, { method: "DELETE" }); },
     crmTasks: function (qs) { return request("/api/crm/tasks" + (qs || "")); },
+    crmLeadFicha: function (leadId) { return request("/api/crm/leads/" + leadId + "/ficha"); },
     crmCreateTask: function (b) { return request("/api/crm/tasks", { method: "POST", body: b }); },
     crmUpdateTask: function (id, b) { return request("/api/crm/tasks/" + id, { method: "PUT", body: b }); },
     crmDeleteTask: function (id) { return request("/api/crm/tasks/" + id, { method: "DELETE" }); },

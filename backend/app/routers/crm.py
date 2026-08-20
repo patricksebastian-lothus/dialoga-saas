@@ -525,12 +525,67 @@ def delete_stage(stage_id: int, db: Session = Depends(get_db), current_user: Use
 # Tarefas
 # --------------------------------------------------------------------------- #
 @router.get("/tasks")
-def list_tasks(status: Optional[str] = None, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def list_tasks(
+    status: Optional[str] = None,
+    lead_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     q = db.query(CrmTask).filter(CrmTask.owner_id == current_user.id)
     if status:
         q = q.filter(CrmTask.status == status)
+    if lead_id:
+        q = q.filter(CrmTask.lead_id == lead_id)
     items = q.order_by(CrmTask.due_at.asc().nullslast(), CrmTask.created_at.desc()).limit(500).all()
     return [_task_out(db, t) for t in items]
+
+
+@router.get("/leads/{lead_id}/ficha")
+def get_lead_ficha(lead_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Pacote único para a ficha do contato (EMG-1B)."""
+    from ..models import LeadNote, Appointment
+
+    lead = _lead_or_404(db, current_user, lead_id)
+    fields = db.query(CustomField).filter(CustomField.owner_id == current_user.id, CustomField.is_active == True).all()  # noqa: E712
+    values = db.query(CustomFieldValue).filter(CustomFieldValue.owner_id == current_user.id, CustomFieldValue.lead_id == lead_id).all()
+    by_field = {v.field_id: v.value for v in values}
+    notes = (
+        db.query(LeadNote)
+        .filter(LeadNote.owner_id == current_user.id, LeadNote.lead_id == lead_id)
+        .order_by(LeadNote.created_at.desc())
+        .limit(30)
+        .all()
+    )
+    tasks = (
+        db.query(CrmTask)
+        .filter(CrmTask.owner_id == current_user.id, CrmTask.lead_id == lead_id)
+        .order_by(CrmTask.due_at.asc().nullslast(), CrmTask.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    appts = (
+        db.query(Appointment)
+        .filter(Appointment.owner_id == current_user.id, Appointment.lead_id == lead_id)
+        .order_by(Appointment.scheduled_at.desc())
+        .limit(20)
+        .all()
+    )
+    return {
+        "lead_id": lead.id,
+        "custom_fields": [{**_field_out(f), "value": by_field.get(f.id)} for f in fields],
+        "notes": [{"id": n.id, "content": n.content, "created_at": n.created_at.isoformat() if n.created_at else None} for n in notes],
+        "tasks": [_task_out(db, t) for t in tasks],
+        "appointments": [
+            {
+                "id": a.id,
+                "title": a.title,
+                "scheduled_at": a.scheduled_at.isoformat() if a.scheduled_at else None,
+                "status": a.status,
+                "appointment_type": a.appointment_type,
+            }
+            for a in appts
+        ],
+    }
 
 
 @router.post("/tasks", status_code=201)
