@@ -98,6 +98,7 @@ _ADDITIVE_COLUMNS = [
     ("appointments", "external_event_id", "VARCHAR(255)", None),
     ("appointments", "calendar_sync_status", "VARCHAR(50)", "not_synced"),
     ("appointments", "calendar_last_error", "TEXT", None),
+    ("appointments", "unit_name", "VARCHAR(120)", None),
 
     # Futuras colunas aditivas em tabelas existentes entram aqui.
     # Ex.: ("users", "is_admin", "BOOLEAN", "0"),

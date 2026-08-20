@@ -186,6 +186,7 @@ class Appointment(Base):
     status = Column(String(50), default="solicitado", index=True)  # solicitado|confirmado|cancelado|realizado|nao_compareceu
     appointment_type = Column(String(50), default="generic", index=True)  # generic|avaliacao|consulta|banho_tosa|visita|test_drive|retorno|suporte
     notes = Column(Text, nullable=True)
+    unit_name = Column(String(120), nullable=True, index=True)
 
     # Preparação para Google Calendar (C.2.3 futura)
     external_calendar_provider = Column(String(50), nullable=True)
@@ -442,5 +443,36 @@ class QuickReply(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=utcnow, index=True)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    owner = relationship("User")
+
+
+class AgendaBlock(Base):
+    """Bloqueio de horário (EMG-2): dia da semana ou data específica, por unidade."""
+    __tablename__ = "agenda_blocks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    unit_name = Column(String(120), nullable=True, index=True)
+    weekday = Column(Integer, nullable=True)
+    date = Column(DateTime, nullable=True, index=True)
+    start_time = Column(String(8), nullable=False, default="00:00")
+    end_time = Column(String(8), nullable=False, default="23:59")
+    reason = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+
+    owner = relationship("User")
+
+
+class AgendaHoliday(Base):
+    """Feriado / dia fechado por unidade (EMG-2)."""
+    __tablename__ = "agenda_holidays"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    date = Column(DateTime, nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    unit_name = Column(String(120), nullable=True, index=True)
+    created_at = Column(DateTime, default=utcnow)
 
     owner = relationship("User")

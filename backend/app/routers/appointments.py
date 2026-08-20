@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_current_user
 from ..database import get_db
-from ..models import Appointment, Flow, Lead, User
+from ..models import AgendaBlock, AgendaHoliday, Appointment, Flow, Lead, User
 from ..schemas import AppointmentCreate, AppointmentUpdate, AppointmentOut
 from ..services import google_calendar_service as gcal
 
@@ -25,6 +25,7 @@ PIPELINE_RULES = {
     "petshop": {"solicitado": "agendamento_pendente", "confirmado": "banho_tosa_marcado", "realizado": "atendido", "nao_compareceu": "no_show", "cancelado": "cancelado"},
     "veiculos": {"solicitado": "agendamento_pendente", "confirmado": "visita_marcada", "realizado": "compareceu", "nao_compareceu": "no_show", "cancelado": "cancelado"},
     "suporte_tecnico": {"solicitado": "agendamento_pendente", "confirmado": "agendado", "realizado": "resolvido", "nao_compareceu": "no_show", "cancelado": "cancelado"},
+    "Funil Emagrecentro": {"solicitado": "lead_novo", "confirmado": "agendou_avaliacao", "realizado": "compareceu", "nao_compareceu": "nao_compareceu", "cancelado": "reativacao"},
 }
 
 
@@ -47,16 +48,75 @@ def _try_sync_google_calendar(db: Session, owner_id: int, appt: Appointment):
         gcal.sync_appointment(db, owner_id, appt)
 
 
+def _hhmm(dt: datetime) -> str:
+    local = dt
+    return f"{local.hour:02d}:{local.minute:02d}"
+
+
+def _time_in_range(hhmm: str, start: str, end: str) -> bool:
+    return (start or "00:00") <= hhmm < (end or "23:59")
+
+
+def _assert_slot_free(db: Session, user: User, scheduled_at: datetime, unit_name: str | None):
+    """Recusa horário em feriado ou bloqueio da unidade."""
+    unit = (unit_name or "").strip()
+    day = scheduled_at.date()
+    hhmm = _hhmm(scheduled_at)
+    weekday = scheduled_at.weekday()  # 0=segunda
+
+    holidays = db.query(AgendaHoliday).filter(AgendaHoliday.owner_id == user.id).all()
+    for h in holidays:
+        if not h.date:
+            continue
+        if h.date.date() != day:
+            continue
+        hun = (h.unit_name or "").strip()
+        if hun and unit and hun.lower() != unit.lower():
+            continue
+        raise HTTPException(400, f"Unidade fechada neste dia ({h.name}).")
+
+    blocks = db.query(AgendaBlock).filter(AgendaBlock.owner_id == user.id).all()
+    for b in blocks:
+        bun = (b.unit_name or "").strip()
+        if bun and unit and bun.lower() != unit.lower():
+            continue
+        if b.date and b.date.date() != day:
+            continue
+        if b.weekday is not None and b.date is None and int(b.weekday) != weekday:
+            continue
+        if _time_in_range(hhmm, b.start_time or "00:00", b.end_time or "23:59"):
+            raise HTTPException(400, f"Horário bloqueado ({b.reason or 'bloqueio de agenda'}).")
+
+
+def _apply_lead_tags(lead: Lead, *names: str):
+    tags = list(lead.tags or [])
+    lower = {str(t).strip().lower() for t in tags}
+    for name in names:
+        if name.lower() not in lower:
+            tags.append(name)
+            lower.add(name.lower())
+    lead.tags = tags
+
+
 def _sync_lead_pipeline_from_appointment(lead: Lead | None, appt: Appointment):
     if not lead:
         return
     ptype = lead.pipeline_type or _pipeline_type_from_appointment_type(appt.appointment_type)
     if ptype == "generic" and appt.appointment_type:
         ptype = _pipeline_type_from_appointment_type(appt.appointment_type)
+    if (lead.pipeline_type or "") == "Funil Emagrecentro":
+        ptype = "Funil Emagrecentro"
     lead.pipeline_type = ptype
     stage = PIPELINE_RULES.get(ptype, PIPELINE_RULES["generic"]).get(appt.status)
     if stage:
         lead.pipeline_stage = stage
+        lead.stage = stage
+    if appt.status == "confirmado":
+        _apply_lead_tags(lead, "Agendou")
+    elif appt.status == "realizado":
+        _apply_lead_tags(lead, "Compareceu")
+    elif appt.status == "nao_compareceu":
+        _apply_lead_tags(lead, "Não compareceu")
 
 
 def _now():
@@ -102,6 +162,7 @@ def _serialize(db: Session, appt: Appointment) -> AppointmentOut:
 def list_appointments(
     status: Optional[str] = None,
     lead_id: Optional[int] = None,
+    unit_name: Optional[str] = None,
     flow_id: Optional[int] = None,
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,
@@ -116,6 +177,8 @@ def list_appointments(
         q = q.filter(Appointment.lead_id == lead_id)
     if flow_id:
         q = q.filter(Appointment.flow_id == flow_id)
+    if unit_name:
+        q = q.filter(Appointment.unit_name == unit_name)
     if date_from:
         q = q.filter(Appointment.scheduled_at >= date_from)
     if date_to:
@@ -137,6 +200,8 @@ def create_appointment(
     if flow_id and not flow:
         flow = _owned_flow(db, flow_id, current_user)
 
+    _assert_slot_free(db, current_user, payload.scheduled_at, payload.unit_name)
+
     appt = Appointment(
         owner_id=current_user.id,
         lead_id=lead.id if lead else None,
@@ -146,6 +211,7 @@ def create_appointment(
         status=payload.status or "solicitado",
         appointment_type=payload.appointment_type or "generic",
         notes=payload.notes,
+        unit_name=(payload.unit_name or "").strip() or None,
         calendar_sync_status="not_synced",
     )
     db.add(appt)
@@ -188,6 +254,12 @@ def update_appointment(
         appt.title = data["title"]
     if "scheduled_at" in data and data["scheduled_at"] is not None:
         appt.scheduled_at = data["scheduled_at"]
+    if "unit_name" in data:
+        appt.unit_name = (data["unit_name"] or "").strip() or None
+    new_when = data.get("scheduled_at") or appt.scheduled_at
+    new_unit = appt.unit_name
+    if "scheduled_at" in data or "unit_name" in data:
+        _assert_slot_free(db, current_user, new_when, new_unit)
     if "status" in data and data["status"] is not None:
         appt.status = data["status"]
     if "appointment_type" in data and data["appointment_type"] is not None:

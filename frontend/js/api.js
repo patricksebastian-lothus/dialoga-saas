@@ -81,6 +81,12 @@
     createAppointment: function (b) { return request("/api/appointments", { method: "POST", body: b }); },
     updateAppointment: function (id, b) { return request("/api/appointments/" + id, { method: "PUT", body: b }); },
     deleteAppointment: function (id) { return request("/api/appointments/" + id, { method: "DELETE" }); },
+    listAgendaBlocks: function () { return request("/api/appointments/blocks"); },
+    createAgendaBlock: function (b) { return request("/api/appointments/blocks", { method: "POST", body: b }); },
+    deleteAgendaBlock: function (id) { return request("/api/appointments/blocks/" + id, { method: "DELETE" }); },
+    listAgendaHolidays: function () { return request("/api/appointments/holidays"); },
+    createAgendaHoliday: function (b) { return request("/api/appointments/holidays", { method: "POST", body: b }); },
+    deleteAgendaHoliday: function (id) { return request("/api/appointments/holidays/" + id, { method: "DELETE" }); },
 
     // ---- Planos ----
     listPlans: function () { return request("/api/plans"); },

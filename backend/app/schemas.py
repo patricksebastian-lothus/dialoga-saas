@@ -248,6 +248,7 @@ class AppointmentUpdate(BaseModel):
     status: Optional[Literal["solicitado", "confirmado", "cancelado", "realizado", "nao_compareceu"]] = None
     appointment_type: Optional[str] = None
     notes: Optional[str] = None
+    unit_name: Optional[str] = None
 
 
 class AppointmentOut(BaseModel):
@@ -260,6 +261,7 @@ class AppointmentOut(BaseModel):
     status: str
     appointment_type: Optional[str] = "generic"
     notes: Optional[str] = None
+    unit_name: Optional[str] = None
     external_calendar_provider: Optional[str] = None
     external_event_id: Optional[str] = None
     calendar_sync_status: Optional[str] = "not_synced"
