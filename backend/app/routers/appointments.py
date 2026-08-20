@@ -223,6 +223,93 @@ def create_appointment(
     return _serialize(db, appt)
 
 
+@router.get("/blocks")
+def list_blocks(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    items = db.query(AgendaBlock).filter(AgendaBlock.owner_id == current_user.id).order_by(AgendaBlock.id.desc()).all()
+    return [
+        {
+            "id": b.id, "unit_name": b.unit_name, "weekday": b.weekday,
+            "date": b.date.isoformat() if b.date else None,
+            "start_time": b.start_time, "end_time": b.end_time, "reason": b.reason,
+        }
+        for b in items
+    ]
+
+
+@router.post("/blocks", status_code=201)
+def create_block(payload: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    date_raw = payload.get("date")
+    dt = None
+    if date_raw:
+        try:
+            dt = datetime.fromisoformat(str(date_raw).replace("Z", "+00:00"))
+        except ValueError:
+            dt = datetime.fromisoformat(str(date_raw) + "T00:00:00")
+    b = AgendaBlock(
+        owner_id=current_user.id,
+        unit_name=(payload.get("unit_name") or "").strip() or None,
+        weekday=payload.get("weekday"),
+        date=dt,
+        start_time=payload.get("start_time") or "00:00",
+        end_time=payload.get("end_time") or "23:59",
+        reason=payload.get("reason"),
+    )
+    db.add(b)
+    db.commit()
+    db.refresh(b)
+    return {"id": b.id, "ok": True}
+
+
+@router.delete("/blocks/{block_id}", status_code=204)
+def delete_block(block_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    b = db.query(AgendaBlock).filter(AgendaBlock.id == block_id, AgendaBlock.owner_id == current_user.id).first()
+    if not b:
+        raise HTTPException(404, "Bloqueio não encontrado.")
+    db.delete(b)
+    db.commit()
+    return
+
+
+@router.get("/holidays")
+def list_holidays(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    items = db.query(AgendaHoliday).filter(AgendaHoliday.owner_id == current_user.id).order_by(AgendaHoliday.date.asc()).all()
+    return [
+        {"id": h.id, "name": h.name, "unit_name": h.unit_name, "date": h.date.isoformat() if h.date else None}
+        for h in items
+    ]
+
+
+@router.post("/holidays", status_code=201)
+def create_holiday(payload: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    date_raw = payload.get("date")
+    if not date_raw:
+        raise HTTPException(400, "Informe a data do feriado.")
+    try:
+        dt = datetime.fromisoformat(str(date_raw).replace("Z", "+00:00"))
+    except ValueError:
+        dt = datetime.fromisoformat(str(date_raw) + "T00:00:00")
+    h = AgendaHoliday(
+        owner_id=current_user.id,
+        name=payload.get("name") or "Feriado",
+        unit_name=(payload.get("unit_name") or "").strip() or None,
+        date=dt,
+    )
+    db.add(h)
+    db.commit()
+    db.refresh(h)
+    return {"id": h.id, "ok": True}
+
+
+@router.delete("/holidays/{holiday_id}", status_code=204)
+def delete_holiday(holiday_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    h = db.query(AgendaHoliday).filter(AgendaHoliday.id == holiday_id, AgendaHoliday.owner_id == current_user.id).first()
+    if not h:
+        raise HTTPException(404, "Feriado não encontrado.")
+    db.delete(h)
+    db.commit()
+    return
+
+
 @router.get("/{appointment_id}", response_model=AppointmentOut)
 def get_appointment(
     appointment_id: int,
